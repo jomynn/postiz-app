@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   Post,
   Put,
@@ -249,6 +250,7 @@ export class IntegrationsController {
 
       return { url };
     } catch (err) {
+      Logger.error('generateAuthUrl failed for ' + integration + ': ' + (err as any)?.message, (err as any)?.stack);
       return { err: true };
     }
   }

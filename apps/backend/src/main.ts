@@ -24,7 +24,7 @@ async function start() {
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
     cors: {
-      ...(!process.env.NOT_SECURED ? { credentials: true } : {}),
+      credentials: true,
       allowedHeaders: [
         'Content-Type',
         'Authorization',
@@ -48,7 +48,9 @@ async function start() {
     },
   });
 
-  await startMcp(app);
+  await startMcp(app).catch((err) => {
+    Logger.warn('MCP/Mastra startup failed (non-fatal): ' + err?.message, 'startMcp');
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

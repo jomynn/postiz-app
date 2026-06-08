@@ -1,62 +1,122 @@
-This project is Postiz, a tool to schedule social media and chat posts to 28+ channels.
-You can add posts to the calendar, they will be added into a workflow and posted at the right time.
-You can find things like:
-- Schedule posts
-- Calendar view
-- Analytics
-- Team management
-- Media library
+# CLAUDE.md
 
-This project is a monorepo with a root only package.json of dependencies.
-Made with PNPM.
-We have 3 important folders
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- apps/backend - this is where the API code is (NESTJS)
-- apps/orchestrator - this is temporal, it's for background jobs (NESTJS) it contains all the workflows and activities
-- apps/frontend - this is the code of the frontend (Vite ReactJS)
-- /libraries contains a lot of services shared between backend and orchestrator and frontend components.
+## Project Overview
 
-We are using only pnpm, don't use any other dependency manager.
-Never install frontend components from npmjs, focus on writing native components.
+Postiz is a social media scheduling tool supporting 28+ platforms. Users schedule posts to a calendar, which feeds into a workflow engine that posts at the right time.
 
-The project uses tailwind 3, before writing any component look at:
-- /apps/frontend/src/app/colors.scss
-- /apps/frontend/src/app/global.scss
-- /apps/frontend/tailwind.config.js
+## Commands
 
-All the --color-custom* are deprecated, don't use them.
+```bash
+# Start dev infrastructure (Postgres, Redis, Temporal) — required before running apps
+pnpm run dev:docker
 
-And check other components in the system before to get the right design.
+# Run all apps in parallel (frontend + backend + orchestrator + extension)
+pnpm run dev
 
-When working on the backend we need to pass the 3 layers:
-Controller >> Service >> Repository (no shortcuts)
-In some cases we will have
-Controller >> Mananger >> Service >> Repository.
+# Run only backend + frontend
+pnpm run dev-backend
 
-Most of the server logic should be inside of libs/server.
-The backend repository is mostly used to write controller, and import files from libs.server.
+# Run individual apps
+pnpm run dev:backend       # NestJS API on :3000
+pnpm run dev:frontend      # Vite React on :4200
+pnpm run dev:orchestrator  # Temporal worker on :3002
 
-For the frontend follow this:
-- Many of the UI components lives in /apps/frontend/src/components/ui
-- Routing is in /apps/frontend/src/app
-- Components are in /apps/frontend/src/components
-- always use SWR to fetch stuff, and use "useFetch" hook from /libraries/helpers/src/utils/custom.fetch.tsx
+# Build
+pnpm run build             # all apps
+pnpm run build:backend
+pnpm run build:frontend
 
-When using SWR, each one have to be in a seperate hook and must comply with react-hooks/rules-of-hooks, never put eslint-disable-next-line on it.
+# Database
+pnpm run prisma-generate   # regenerate Prisma client after schema changes
+pnpm run prisma-db-push    # push schema to DB (accepts data loss — dev only)
 
-It means that this is valid:
-const useCommunity = () => {
-   return useSWR....
-}
+# Tests (must run from repo root)
+pnpm test
 
-This is not valid:
-const useCommunity = () => {
-  return {
-    communities: () => useSWR<CommunitiesListResponse>("communities", getCommunities),
-    providers: () => useSWR<ProvidersListResponse>("providers", getProviders),
-  };
-}
+# Lint (must run from repo root)
+pnpm run lint
+```
 
-- Linting of the project can run only from the root.
-- Use only pnpm.
-- The system is in production with many users, if you want to change something, you need to be sure that you are not breaking anything for existing users and a migration might be needed
+## Monorepo Structure
+
+```
+apps/
+  backend/       NestJS REST API
+  frontend/      Vite + React SPA
+  orchestrator/  Temporal.io worker (background jobs)
+  extension/     Browser extension
+  sdk/           Public SDK
+libraries/
+  nestjs-libraries/   Shared NestJS modules, Prisma schema, integrations
+  helpers/            Shared utilities and hooks (frontend + backend)
+  react-shared-libraries/  Shared React components
+```
+
+### TypeScript Path Aliases
+
+```
+@gitroom/backend/*         → apps/backend/src/*
+@gitroom/frontend/*        → apps/frontend/src/*
+@gitroom/helpers/*         → libraries/helpers/src/*
+@gitroom/nestjs-libraries/* → libraries/nestjs-libraries/src/*
+@gitroom/react/*           → libraries/react-shared-libraries/src/*
+@gitroom/orchestrator/*    → apps/orchestrator/src/*
+```
+
+## Backend Architecture
+
+Layer order must always be respected:
+
+```
+Controller → Service → Repository
+Controller → Manager → Service → Repository  (for complex flows)
+```
+
+- **Controllers** live in `apps/backend/src/api/` — thin, just wire HTTP to services
+- **Business logic** belongs in `libraries/nestjs-libraries/src/` (not in the backend app)
+- **Prisma schema** is at `libraries/nestjs-libraries/src/database/prisma/schema.prisma`
+- **Social integrations** are in `libraries/nestjs-libraries/src/integrations/social/` — each platform extends `social.abstract.ts`
+
+## Frontend Architecture
+
+- **Routing**: file-based in `apps/frontend/src/app/` (folder = route segment)
+- **Components**: `apps/frontend/src/components/`
+- **UI primitives**: `apps/frontend/src/components/ui`
+- **Data fetching**: always use SWR via the `useFetch` hook from `@gitroom/helpers/utils/custom.fetch`
+- Each SWR call must be its own named hook — never inline or return SWR calls from object properties (violates `react-hooks/rules-of-hooks`)
+
+### Styling
+
+- Tailwind 3 — reference `apps/frontend/src/app/colors.scss` and `apps/frontend/tailwind.config.cjs` before writing new components
+- Design tokens to use: `primary`, `secondary`, `third`–`seventh`, `input`, `inputText`, `tableBorder`, `newBgColor`, `newBorder`, `newSep`, `newBgColorInner`, etc.
+- `--color-custom*` CSS variables and their `customColor*` Tailwind aliases are **deprecated** — do not use them
+- Dark/light mode is controlled by the `.dark` / `.light` class on the root element
+
+## Temporal (Orchestrator)
+
+- **Workflows** in `apps/orchestrator/src/workflows/` — deterministic, use `proxyActivities` to call activities
+- **Activities** in `apps/orchestrator/src/activities/` — where actual work happens (DB calls, external APIs)
+- **Signals** in `apps/orchestrator/src/signals/` — for triggering state changes in running workflows
+- Task queue name: `"main"`
+
+## Dev Infrastructure Ports
+
+| Service        | Port |
+|----------------|------|
+| Backend API    | 3000 |
+| Frontend       | 4200 |
+| Orchestrator   | 3002 |
+| PostgreSQL     | 5432 |
+| Redis          | 6379 |
+| Temporal       | 7233 |
+| Temporal UI    | 8080 |
+| pgAdmin        | 8081 |
+
+## Rules
+
+- Use only `pnpm` — never `npm` or `yarn`
+- Never install frontend components from npm — write native components
+- Linting and tests run only from the repo root
+- The system is in production — any schema or data-model change needs a migration; think carefully about backward compatibility before modifying existing behavior

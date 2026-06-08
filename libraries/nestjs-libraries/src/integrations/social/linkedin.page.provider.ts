@@ -29,10 +29,6 @@ export class LinkedinPageProvider
     'openid',
     'profile',
     'w_member_social',
-    'r_basicprofile',
-    'rw_organization_admin',
-    'w_organization_social',
-    'r_organization_social',
   ];
 
   override editor = 'normal' as const;
